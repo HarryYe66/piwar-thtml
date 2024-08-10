@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Click Game</title>
+    <style>
+        body,
+        html {
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #f0f0f0;
+            margin: 0;
+        }
+
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 400px;
+        }
+
+        #click-area {
+            margin-top: 10px;
+            width: 350px;
+            height: 300px;
+            background-color: #4CAF50;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            user-select: none;
+            position: relative;
+        }
+
+        #clicks {
+            font-size: 20px;
+        }
+
+        .click-effect {
+            position: absolute;
+            font-size: 20px;
+            color: #ff0;
+            animation: fadeOut 1s ease-in-out forwards;
+        }
+
+        @keyframes fadeOut {
+            0% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+        }
+
+        #skill-list {
+            margin-top: 20px;
+            width: 350px;
+        }
+
+        .skill-item {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 10px;
+            background-color: #fff;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            width: 100%;
+        }
+
+        .upgrade-btn {
+            padding: 5px 10px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="game-container">
+        <div id="clicks">Clicks: 0 / Energy: 0</div>
+        <div id="click-area">Click here!</div>
+        <div id="skill-list"></div>
+    </div>
+
+    <script>
+        const userId = '1' // 获取用户 ID
+
+        const ws = new WebSocket(`ws://localhost:3012/ws?userId=${userId}`)
+        const clickArea = document.getElementById('click-area')
+        const clicksDisplay = document.getElementById('clicks')
+        const skillList = document.getElementById('skill-list')
+
+        let clicks = 0
+        let energy = 0
+
+        // ws.onopen = () => {
+        //     console.log('WebSocket connection established')
+        //     ws.send(JSON.stringify({ type: 'requestSkillList' }))
+        // }
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error)
+            alert(JSON.stringify(error))
+        }
+
+        ws.onclose = (event) => {
+            console.log('WebSocket connection closed:', event
+                .code, event.reason)
+
+        }
+
+        ws.onmessage = (message) => {
+            console.log(message)
+
+            if (message.data) {
+                const data = JSON.parse(message.data)
+
+                if (data.type === 'update') {
+                    energy = data.energy
+                    clicksDisplay.textContent = `Clicks: ${data.totalClicks} / Energy: ${energy}`
+                } else if (data.type === 'skillList') {
+                    console.log(data.skills, "data.skills")
+                    displaySkills(data.skills)
+                }
+            }
+        }
+
+        clickArea.addEventListener('click', (event) => {
+            if (energy > 0) {
+                clicks++
+                energy--
+                clicksDisplay.textContent = `Clicks: ${clicks} / Energy: ${energy}`
+                ws.send(JSON.stringify({ type: 'clicks', count: 1 }))
+                showClickEffect(event.clientX, event.clientY, '+1')
+            }
+        })
+
+        function showClickEffect (x, y, text) {
+            const effect = document.createElement('div')
+            effect.className = 'click-effect'
+            effect.textContent = text
+            effect.style.left = `${x}px`
+            effect.style.top = `${y}px`
+            document.body.appendChild(effect)
+
+            effect.addEventListener('animationend', () => {
+                effect.remove()
+            })
+        }
+
+        function displaySkills (skills) {
+            skillList.innerHTML = ''
+            skills.forEach(skill => {
+                const skillItem = document.createElement('div')
+                skillItem.className = 'skill-item'
+                skillItem.innerHTML = `
+                    <span>${skill.description}: Level ${skill.level}</span>
+                    <span>Effect: ${JSON.stringify(skill.effect)}</span>
+                    <span>Required Pis: ${skill.requiredPis || 0}</span>
+                    <span>Required Pi Crystals: ${skill.requiredPiCrystals || 0}</span>
+                    <span>Cost Pis: ${skill.costPis || 0}</span>
+                    <span>Cost Pi Crystals: ${skill.costPiCrystals || 0}</span>
+                    <button class="upgrade-btn" onclick="upgradeSkill(${skill.levelId})">Upgrade</button>
+                `
+                skillList.appendChild(skillItem)
+            })
+        }
+
+        function upgradeSkill (skillIdLevelId) {
+            ws.send(JSON.stringify({ type: 'upgradeSkill', skillIdLevelId }))
+        }
+
+        setInterval(() => {
+            ws.send(JSON.stringify({ type: 'requestUpdate' }))
+        }, 1000)
+    </script>
+</body>
+
+</html>

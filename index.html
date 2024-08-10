@@ -45,6 +45,10 @@
         #websocket-data {
             margin-top: 10px;
             font-size: 20px;
+            width: 350px;
+            /* 设置容器宽度 */
+            word-wrap: break-word;
+            /* 允许在单词内换行 */
         }
 
         #text-log {
@@ -57,6 +61,32 @@
             font-size: 20px;
             color: #ff0;
             animation: fadeOut 1s ease-in-out forwards;
+        }
+
+
+        #skill-list {
+            margin-top: 20px;
+            width: 350px;
+        }
+
+        .skill-items {
+
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            background-color: #fff;
+            margin-bottom: 10px;
+            width: 100%;
+            border: thick double #32a1ce;
+        }
+
+        .upgrade-btn {
+            padding: 5px 10px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 10px;
         }
 
         @keyframes fadeOut {
@@ -75,37 +105,39 @@
 
 <body>
     <div id="game-container">
-        <div id="clicks">Clicks: 0 / Energy: 1000</div>
-        <div id="reset-buttons">
-            <button id="reset-item">Energy Limit</button>
-            <button id="reset-item">Multitap</button>
-            <button id="reset-item">Reset</button>
-        </div>
-
+        <div id="clicks"></div>
+        <div id="reset-buttons"></div>
         <div id="click-area">Click here!</div>
-        <div id="websocket-data"></div>
         <div id="text-log"></div>
+        <div id="skill-list"></div>
+        <div id="websocket-data"></div>
+
     </div>
 
     <script>
         const userId = '1' // 获取用户 ID
 
-        const ws = new WebSocket(`ws://192.168.1.24:3010/ws?userId=${userId}`)
+        const ws = new WebSocket(`ws://192.168.1.24:3012/ws?userId=${userId}`)
         // const ws = new WebSocket('ws://localhost:3010')
         const clickArea = document.getElementById('click-area')
         const clicksDisplay = document.getElementById('clicks')
+        const buttonsDisplay = document.getElementById('reset-buttons')
         const websocketLog = document.getElementById('websocket-data')
         const textLog = document.getElementById('text-log')
-
+        const skillList = document.getElementById('skill-list')
         let clicks = 0
         let clickBuffer = 0
-        let maxEnergy = 1000
+        let maxEnergy = 0
         let MultitapNb = 1
         let energy = maxEnergy
+        let clickRate = 1
 
         ws.onopen = () => {
             console.log('WebSocket connection established')
+            ws.send(JSON.stringify({ type: 'requestSkillList' }))
+
         }
+
 
         ws.onerror = (error) => {
             console.error('WebSocket error:', error)
@@ -119,9 +151,15 @@
                 console.log(data)
 
                 if (data.type === 'update') {
-                    energy = data.energy
-                    butter = data.butter
-                    clicksDisplay.textContent = `Clicks: ${butter} / Energy: ${energy}`
+                    displayData(data)
+                } else if (data.type === 'skillList') {
+                    console.log(data.skills, "data.skills")
+                    displaySkills(data.skills)
+                } else if (data.type === 'upgradeFailed') {
+                    alert('升级失败，条件不满足')
+                } else if (data.type === 'upgradeSuccess') {
+                    alert('升级成功')
+
                 }
             }
         }
@@ -130,17 +168,17 @@
             e.preventDefault()  // 阻止默认的点击行为
             const touchCount = e.touches.length
             console.log(e)
-            const energyPerTouch = touchCount * MultitapNb
+            const energyPerTouch = touchCount
             textLog.textContent = ` ${JSON.stringify(e)} ${touchCount}`
             if (energy >= touchCount) {
                 clicks += touchCount
                 clickBuffer += touchCount
                 energy -= touchCount
-                clicksDisplay.textContent = `Clicks: ${clicks} / Energy: ${energy}`
+                // clicksDisplay.textContent = `Clicks: ${butter} /Pis: ${Pis} /PiCrystals: ${PiCrystals} / Energy: ${energy}`
                 ws.send(JSON.stringify({ type: 'clicks', count: touchCount }))
 
                 for (let i = 0; i < touchCount; i++) {
-                    showClickEffect(e.touches[i].clientX, e.touches[i].clientY, `+${MultitapNb}`)
+                    showClickEffect(e.touches[i].clientX, e.touches[i].clientY, `+${clickRate}`)
                 }
             }
         })
@@ -157,14 +195,108 @@
                 effect.remove()
             })
         }
+        function displaySkills (skills) {
+            console.log(skills, "skills")
 
+            skillList.innerHTML = ''
+            const effectDictionary = {
+                energyCap: "能量上限",
+                passiveEnergyRate: "能量恢复速度",
+                clickRate: "点击加成",
+                passiveIncomeRate: "被动产生金币"
+                // 这里可以添加其他效果的描述
+            }
+
+            skills.forEach(skill => {
+                const skillItem = document.createElement('div')
+                skillItem.className = 'skill-items'
+
+                // 获取效果描述
+                const effectDescription = skill.nextEffect
+                    ? Object.entries(skill.nextEffect).map(([key, value]) => {
+                        return `${effectDictionary[key] || key}: +${value}`
+                    }).join(', ')
+                    : "No further upgrades"
+
+                // 构建技能信息
+                let skillInfo = `
+            <span>技能: ${skill.skillName}</span>
+            <span>当前等级: ${skill.currentLevel}</span>
+            <span>下一级: ${skill.nextLevel || '已达最高等级'}</span>
+            <span>升级效果: ${effectDescription}</span>
+        `
+
+                // 如果有前置条件，显示前置条件
+                if (skill.nextRequiredSkillId && skill.nextRequiredSkillLevel) {
+                    skillInfo += `<span>前置条件: ${skill.nextRequiredSkillname} (等级 ${skill.nextRequiredSkillLevel})</span>`
+                }
+
+                // 显示升级所需的资源
+                if (!skill.isMaxLevel) {
+                    skillInfo += `
+                <span>消耗 Pis: ${skill.nextCostPis || 0}</span>
+                <span>消耗 Pi Crystals: ${skill.nextCostPiCrystals || 0}</span>
+            `
+                }
+
+                // 添加升级按钮，如果达到最高等级，则按钮灰色不可点击
+                if (!skill.isMaxLevel) {
+                    skillInfo += `<button class="upgrade-btn" onclick="upgradeSkill(${skill.skillId}, ${skill.nextLevel})">升级</button>`
+                } else {
+                    skillInfo += `<button class="upgrade-btn" disabled style="background-color: grey; cursor: not-allowed;">已达最高等级</button>`
+                }
+
+                skillItem.innerHTML = skillInfo
+                skillList.appendChild(skillItem)
+            })
+        }
+
+
+        function displayData (data) {
+            console.log(data, "data")
+
+            // 更新全局变量
+            energy = data.energy || 0
+            butter = data.totalClicks || 0
+            Pis = data.Pis || 0
+            PiCrystals = data.PiCrystals || 0
+            clickRate = data.clickRate || 1
+
+
+            // 更新显示文本
+            // clicksDisplay.textContent = `Clicks: ${butter} /Pis: ${Pis} /PiCrystals: ${PiCrystals} / Energy: ${energy}`
+
+            // 清空按钮容器
+            buttonsDisplay.innerHTML = ''
+
+            // 更新显示文本
+            // clicksDisplay.textContent = `Clicks: ${butter} /Pis: ${Pis} /PiCrystals: ${PiCrystals} / Energy: ${energy}`
+
+            // 清空按钮容器
+            buttonsDisplay.innerHTML = ''
+
+            // 创建按钮
+            const buttonItem = document.createElement('div')
+
+            let buttonInfo = `<button id="reset-item">Clicks ${butter}</button>`
+            buttonInfo += `<button id="reset-item">Pis ${Pis}</button>`
+            buttonInfo += `<button id="reset-item">PiCrystals ${PiCrystals}</button>`
+            buttonInfo += `<button id="reset-item">Energy ${energy}</button>`
+            buttonItem.innerHTML = buttonInfo
+            // 添加按钮到页面
+            buttonsDisplay.appendChild(buttonItem)
+        }
+
+        function upgradeSkill (skillId, nextLevel) {
+            ws.send(JSON.stringify({ type: 'upgradeSkill', skillId, nextLevel }))
+        }
         // Reset button logic
-        document.getElementById('reset-item').addEventListener('click', () => {
-            clicks = 0
-            clickBuffer = 0
-            energy = maxEnergy
-            clicksDisplay.textContent = `Clicks: ${clicks} / Energy: ${energy}`
-        })
+        // document.getElementById('reset-item').addEventListener('click', () => {
+        //     clicks = 0
+        //     clickBuffer = 0
+        //     energy = maxEnergy
+        //     clicksDisplay.textContent = `Clicks: ${clicks} / Energy: ${energy}`
+        // })
 
         // Send clicks to server every 5 seconds
         // setInterval(() => {

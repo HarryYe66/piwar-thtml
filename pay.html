@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solana Token Deposit Listener Test</title>
+    <script src="https://unpkg.com/@solana/web3.js@1.95.1/lib/index.iife.js"></script>
+    <script src="https://unpkg.com/@solana/spl-token@0.1.8/lib/index.iife.min.js"></script>
+    <script src="https://unpkg.com/@solana/spl-memo@0.2.5/lib/index.iife.min.js"></script>
+    <script>
+        // Polyfill for Buffer
+        (function () {
+            if (window.Buffer) return
+            const buffer = new ArrayBuffer(256)
+            const bufferView = new Uint8Array(buffer)
+            window.Buffer = {
+                from: function (str) {
+                    const length = str.length
+                    for (let i = 0; i < length; i++) {
+                        bufferView[i] = str.charCodeAt(i)
+                    }
+                    return bufferView
+                }
+            }
+        })();
+    </script>
+</head>
+
+<body>
+    <h1>Solana Token Deposit Listener Test</h1>
+    <p>点击下面的按钮来模拟一个代币转账到指定地址：</p>
+    <button onclick="simulateTokenTransfer()">模拟代币转账</button>
+
+    <script>
+        const depositAddress = '74A2G5b6oPK3PS3yX5rAtFwnYvxtbAuhckoWG125KMcP' // 替换为你的充值地址
+        const tokenMintAddress = '9Ttyez3xiruyj6cqaR495hbBkJU6SUWdV6AmQ9MvbyyS' // 替换为你的代币Mint地址
+
+        async function simulateTokenTransfer () {
+            try {
+                const wallet = window.solana
+                if (!wallet) {
+                    alert('请安装Solana钱包')
+                    return
+                }
+
+                await wallet.connect()
+                // const connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('mainnet-beta'))
+                // const connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('mainnet-beta'))
+
+                const RPC_ENDPOINT =
+                    'https://intensive-quick-dinghy.solana-mainnet.quiknode.pro/3cfd1eea121de789cd892ba4a1989ddf28db67d0/'
+                const RPC_WEBSOCKET_ENDPOINT =
+                    'wss://intensive-quick-dinghy.solana-mainnet.quiknode.pro/3cfd1eea121de789cd892ba4a1989ddf28db67d0/'
+                const connection = new solanaWeb3.Connection(RPC_ENDPOINT, {
+                    wsEndpoint: RPC_WEBSOCKET_ENDPOINT,
+                    commitment: 'confirmed',
+                })
+                const sender = wallet.publicKey
+                const receiver = new solanaWeb3.PublicKey(depositAddress)
+                const tokenMint = new solanaWeb3.PublicKey(tokenMintAddress)
+
+                const fromTokenAccount = await splToken.Token.getAssociatedTokenAddress(
+                    splToken.ASSOCIATED_TOKEN_PROGRAM_ID,
+                    splToken.TOKEN_PROGRAM_ID,
+                    tokenMint,
+                    sender
+                )
+
+                const toTokenAccount = await splToken.Token.getAssociatedTokenAddress(
+                    splToken.ASSOCIATED_TOKEN_PROGRAM_ID,
+                    splToken.TOKEN_PROGRAM_ID,
+                    tokenMint,
+                    receiver
+                )
+
+                const transaction = new solanaWeb3.Transaction().add(
+                    splToken.Token.createTransferInstruction(
+                        splToken.TOKEN_PROGRAM_ID,
+                        fromTokenAccount,
+                        toTokenAccount,
+                        sender,
+                        [],
+                        1 * Math.pow(10, 6) // assuming the token has 6 decimal places
+                    ),
+                    new solanaWeb3.TransactionInstruction({
+                        keys: [{ pubkey: sender, isSigner: true, isWritable: true }],
+                        data: Buffer.from('Test memo'), // 将 'Test memo' 替换为你需要的备注信息
+                        programId: new solanaWeb3.PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr')
+                    })
+                )
+
+                const { blockhash } = await connection.getRecentBlockhash()
+                transaction.recentBlockhash = blockhash
+                transaction.feePayer = sender
+
+                const signedTransaction = await wallet.signTransaction(transaction)
+                const signature = await connection.sendRawTransaction(signedTransaction.serialize())
+
+                await connection.confirmTransaction(signature, 'confirmed')
+                alert('模拟代币转账成功')
+            } catch (error) {
+                console.error('Error during token transfer:', error)
+                alert('模拟代币转账失败，请重试')
+            }
+        }
+    </script>
+</body>
+
+</html>
