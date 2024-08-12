@@ -129,7 +129,7 @@
         let clickBuffer = 0
         let maxEnergy = 0
         let MultitapNb = 1
-        let energy = maxEnergy
+        let energy = 0
         let clickRate = 1
 
         ws.onopen = () => {
@@ -167,10 +167,10 @@
         clickArea.addEventListener('touchstart', (e) => {
             e.preventDefault()  // 阻止默认的点击行为
             const touchCount = e.touches.length
-            console.log(e)
+            console.log(e, "clickArea")
             const energyPerTouch = touchCount
             textLog.textContent = ` ${JSON.stringify(e)} ${touchCount}`
-            if (energy >= touchCount) {
+            if (energy >= touchCount * clickRate) {
                 clicks += touchCount
                 clickBuffer += touchCount
                 energy -= touchCount
@@ -227,21 +227,44 @@
         `
 
                 // 如果有前置条件，显示前置条件
+                let hasRequiredSkill = true
                 if (skill.nextRequiredSkillId && skill.nextRequiredSkillLevel) {
-                    skillInfo += `<span>前置条件: ${skill.nextRequiredSkillname} (等级 ${skill.nextRequiredSkillLevel})</span>`
+                    const requiredSkill = skills.find(s => s.skillId === skill.nextRequiredSkillId)
+                    if (requiredSkill && requiredSkill.currentLevel < skill.nextRequiredSkillLevel) {
+                        hasRequiredSkill = false
+                    }
+                    const conditionColor = hasRequiredSkill ? 'green' : 'red'
+
+                    skillInfo += `<span style="color: ${conditionColor};">前置条件: ${skill.nextRequiredSkillname} (等级 ${skill.nextRequiredSkillLevel})</span>`
                 }
 
                 // 显示升级所需的资源
                 if (!skill.isMaxLevel) {
+                    let hasRequiredSkillnextCostPis = parseFloat(skill.nextCostPis || 0) <= parseFloat(Pis)
+                    let nextCostPiCrystals = parseFloat(skill.nextCostPiCrystals || 0) <= parseFloat(PiCrystals)
+                    const conditionColor1 = hasRequiredSkillnextCostPis ? 'green' : 'red'
+                    const conditionColor2 = nextCostPiCrystals ? 'green' : 'red'
                     skillInfo += `
-                <span>消耗 Pis: ${skill.nextCostPis || 0}</span>
-                <span>消耗 Pi Crystals: ${skill.nextCostPiCrystals || 0}</span>
-            `
+                        <span style="color: ${conditionColor1};">消耗 Pis: ${skill.nextCostPis || 0}</span>
+                        <span style="color: ${conditionColor2};">消耗 Pi Crystals: ${skill.nextCostPiCrystals || 0}</span>
+                    `
                 }
 
                 // 添加升级按钮，如果达到最高等级，则按钮灰色不可点击
                 if (!skill.isMaxLevel) {
-                    skillInfo += `<button class="upgrade-btn" onclick="upgradeSkill(${skill.skillId}, ${skill.nextLevel})">升级</button>`
+                    // 判断是否可以升级
+                    const canUpgrade = !skill.isMaxLevel &&
+                        parseFloat(skill.nextCostPis || 0) <= parseFloat(Pis) &&
+                        parseFloat(skill.nextCostPiCrystals || 0) <= parseFloat(PiCrystals) &&
+                        hasRequiredSkill
+
+                    // 添加升级按钮，如果达到最高等级，则按钮灰色不可点击
+                    if (canUpgrade) {
+                        skillInfo += `<button class="upgrade-btn" onclick="upgradeSkill(${skill.skillId}, ${skill.nextLevel})">升级</button>`
+                    } else {
+                        skillInfo += `<button class="upgrade-btn" disabled style="background-color: grey; cursor: not-allowed;">未满足要求</button>`
+                    }
+
                 } else {
                     skillInfo += `<button class="upgrade-btn" disabled style="background-color: grey; cursor: not-allowed;">已达最高等级</button>`
                 }
