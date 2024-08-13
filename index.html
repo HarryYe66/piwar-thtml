@@ -6,7 +6,8 @@
     <meta name="viewport"
         content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
-
+    <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsencrypt/3.0.0/jsencrypt.min.js"></script>
     <title>Click Game</title>
     <style>
         body,
@@ -118,6 +119,8 @@
         const userId = '1' // 获取用户 ID
 
         const ws = new WebSocket(`ws://192.168.1.24:3012/ws?userId=${userId}`)
+        // const ws = new WebSocket(`ws://localhost:3033/ws?userId=${userId}`)
+
         // const ws = new WebSocket('ws://localhost:3010')
         const clickArea = document.getElementById('click-area')
         const clicksDisplay = document.getElementById('clicks')
@@ -130,11 +133,70 @@
         let maxEnergy = 0
         let MultitapNb = 1
         let energy = 0
+        let Pis = 0
+        let PiCrystals = 0
         let clickRate = 1
 
+
+
+        const publicKey = `-----BEGIN PUBLIC KEY-----
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzN+i9uppU4Q576dg3LjP
+        /rV9fhKknDthACf7HEPAw+NURrPS6TEj0lvU6VzuCVT+fbTxomokc2iwnIV+rbk4
+        7DeHclt8h3xu3sp7J/jF7051meVRnnTjxtcw3getNxR9A+KVBUa/NUpG8J/xILDH
+        SONQWkLnih5hEpN2etllK0eoD8qH6txdpBUQzM1IMNwMJl5DPalHpy3+pokmMMrP
+        Vqvu2tKcMfp4NSui5z2wSy4F3JvFzJGawmPZwN8oseNGRlC6N995hGHUFtGayX+g
+        YNG1uHG5H8ssDavYudjATHBfW0EtPEVouR6uWDzOO8/xntzVgOgAGUn5tLZlUET2
+        TwIDAQAB
+        -----END PUBLIC KEY-----`
+
+        let aesKey = ''
+
+
+        // 使用 RSA 公钥加密 AES 密钥
+        const encrypt = new JSEncrypt()
+        encrypt.setPublicKey(publicKey)
+        const encryptedAesKey = encrypt.encrypt(aesKey)
+
+        function encryptMessage (message, key) {
+            const iv = CryptoJS.lib.WordArray.random(16)
+            const keyUtf8 = CryptoJS.enc.Base64.parse(key)
+            const encrypted = CryptoJS.AES.encrypt(message, keyUtf8, { iv: iv }).toString()
+            return iv.toString(CryptoJS.enc.Base64) + ':' + encrypted
+        }
+
+        function decryptMessage (encryptedMessage, key) {
+            const parts = encryptedMessage.split(':')
+            const iv = CryptoJS.enc.Base64.parse(parts[0])
+            const encrypted = parts[1]
+            const keyUtf8 = CryptoJS.enc.Base64.parse(key)
+            const decrypted = CryptoJS.AES.decrypt(encrypted, keyUtf8, { iv: iv })
+            return decrypted.toString(CryptoJS.enc.Utf8)
+        }
+
+
         ws.onopen = () => {
+
+            console.log('Connected to server')
+
+            // 生成 32 字节的 AES 密钥（直接使用 WordArray 并转换为 Base64 字符串）
+            aesKey = CryptoJS.lib.WordArray.random(32).toString(CryptoJS.enc.Base64)
+            console.log('Generated AES key:', aesKey)
+
+            // 使用 RSA 公钥加密 AES 密钥
+            const encrypt = new JSEncrypt()
+            encrypt.setPublicKey(publicKey)
+            const encryptedAesKey = encrypt.encrypt(aesKey)
+
+            if (!encryptedAesKey) {
+                console.error('Failed to encrypt AES key')
+                return
+            }
+
+            // 发送加密的 AES 密钥到服务器
+            ws.send(encryptedAesKey)
+
             console.log('WebSocket connection established')
-            ws.send(JSON.stringify({ type: 'requestSkillList' }))
+            sendmessage({ type: 'requestSkillList' })
 
         }
 
@@ -143,10 +205,16 @@
             console.error('WebSocket error:', error)
         }
 
-        ws.onmessage = (message) => {
-            if (message.data) {
-                websocketLog.textContent = message.data
-                const data = JSON.parse(message.data)
+        ws.onmessage = (event) => {
+            const encryptedMessage = event.data
+            const decryptedMessage = decryptMessage(encryptedMessage, aesKey)
+            console.log('Received from server:', decryptedMessage)
+            console.log('Received from server1:', event)
+
+
+            if (event.data) {
+                websocketLog.textContent = decryptedMessage
+                const data = JSON.parse(decryptedMessage)
 
                 console.log(data)
 
@@ -159,7 +227,7 @@
                     alert('升级失败，条件不满足')
                 } else if (data.type === 'upgradeSuccess') {
                     alert('升级成功')
-
+                    sendmessage({ type: 'requestSkillList' })
                 }
             }
         }
@@ -175,13 +243,19 @@
                 clickBuffer += touchCount
                 energy -= touchCount
                 // clicksDisplay.textContent = `Clicks: ${butter} /Pis: ${Pis} /PiCrystals: ${PiCrystals} / Energy: ${energy}`
-                ws.send(JSON.stringify({ type: 'clicks', count: touchCount }))
+                sendmessage({ type: 'clicks', count: touchCount })
 
                 for (let i = 0; i < touchCount; i++) {
                     showClickEffect(e.touches[i].clientX, e.touches[i].clientY, `+${clickRate}`)
                 }
             }
         })
+
+        function sendmessage (message) {
+            const data = JSON.stringify(message)
+            const encryptedMessage = encryptMessage(data, aesKey)
+            ws.send(encryptedMessage)
+        }
 
         function showClickEffect (x, y, text) {
             const effect = document.createElement('div')
@@ -331,7 +405,9 @@
 
         // Request server to send update every 1/3 second
         setInterval(() => {
-            ws.send(JSON.stringify({ type: 'requestUpdate' }))
+            const data = JSON.stringify({ type: 'requestUpdate' })
+            const encryptedMessage = encryptMessage(data, aesKey)
+            ws.send(encryptedMessage)
         }, 1000)
     </script>
 </body>

@@ -28,8 +28,8 @@
         -----END PUBLIC KEY-----`
 
         let aesKey = ''
-
-        const ws = new WebSocket('ws://localhost:3033')
+        const userId = `1`
+        const ws = new WebSocket(`ws://localhost:3033/ws?userId=${userId}`)
 
         ws.onopen = () => {
             console.log('Connected to server')
