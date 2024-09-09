@@ -9,7 +9,7 @@
 
 <body>
     <h1>Pi Browser Login Demo</h1>
-    <button id="loginBtn">Login with Pi</button>
+    <button id="loginBtn">Login with Pi1</button>
 
     <div id="userData" style="display: none;">
         <h2>User Data</h2>
@@ -27,23 +27,37 @@
 
         // When login button is clicked
         loginBtn.addEventListener('click', () => {
-            Pi.authenticate(
-                // Empty scopes array means we're not asking for anything beyond basic identity
-                ['username', 'uid'],
-                function onSuccess (userData) {
-                    console.log("Login successful:", userData)
-                    alert(JSON.stringify(userData, null, 2))
-                    // Display user data in the info div
-                    userInfoPre.textContent = JSON.stringify(userData, null, 2)
-                    userInfoDiv.style.display = 'block'
-                },
-                function onIncomplete () {
-                    console.error("User incomplete.")
-                },
-                function onFailure (error) {
-                    console.error("Login failed:", error)
-                }
-            )
+            // Pi.authenticate(
+            //     // Empty scopes array means we're not asking for anything beyond basic identity
+            //     ['username', 'uid'],
+            //     function onSuccess (userData) {
+            //         console.log("Login successful:", userData)
+            //         alert(JSON.stringify(userData, null, 2))
+            //         // Display user data in the info div
+            //         userInfoPre.textContent = JSON.stringify(userData, null, 2)
+            //         userInfoDiv.style.display = 'block'
+            //     },
+            //     function onIncomplete () {
+            //         console.error("User incomplete.")
+            //     },
+            //     function onFailure (error) {
+            //         console.error("Login failed:", error)
+            //     }
+            // )
+            // Authenticate the user, and get permission to request payments from them:
+            const scopes = ['payments']
+
+            // Read more about this callback in the SDK reference:
+            function onIncompletePaymentFound (payment) { /* ... */ };
+
+            Pi.authenticate(scopes, onIncompletePaymentFound).then(function (auth) {
+                console.log(`Hi there! You're ready to make payments!`)
+                alert(JSON.stringify(auth, null, 2))
+                userInfoPre.textContent = JSON.stringify(userData, null, 2)
+                userInfoDiv.style.display = 'block'
+            }).catch(function (error) {
+                console.error(error)
+            })
         });
 
     </script>
