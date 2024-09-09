@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsencrypt/3.0.0/jsencrypt.min.js"></script>
+    <title>Click Game</title>
+    <style>
+        body,
+        html {
+            height: 100%;
+            display: block;
+            justify-content: center;
+            align-items: center;
+            background-color: #f0f0f0;
+
+        }
+
+        #game-container {
+            display: block;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #click-area {
+            margin-top: 10px;
+            height: 500px;
+            background-color: #4CAF50;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            user-select: none;
+            position: relative;
+        }
+
+        #clicks {
+            font-size: 20px;
+        }
+
+        #websocket-data {
+            margin-top: 10px;
+            font-size: 20px;
+            width: 350px;
+            /* 设置容器宽度 */
+            word-wrap: break-word;
+            /* 允许在单词内换行 */
+        }
+
+        #text-log {
+            margin-top: 10px;
+            font-size: 20px;
+        }
+
+        .click-effect {
+            position: absolute;
+            font-size: 20px;
+            color: #ff0;
+            animation: fadeOut 1s ease-in-out forwards;
+        }
+
+
+        #skill-list {
+            margin-top: 20px;
+            width: 350px;
+        }
+
+        .skill-items {
+
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            background-color: #fff;
+            margin-bottom: 10px;
+            width: 100%;
+            border: thick double #32a1ce;
+        }
+
+        .upgrade-btn {
+            padding: 5px 10px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        @keyframes fadeOut {
+            0% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="game-container">
+        <div id="clicks"></div>
+        <div id="reset-buttons"></div>
+        <div id="click-area">Click here!</div>
+        <div id="text-log"></div>
+        <button id="sign-in">签到</button>
+        <div id="skill-list"></div>
+        <div id="websocket-data"></div>
+
+    </div>
+
+    <script>
+        const userId = '70ead792ccf1fa8f792fc6635d5311ce' // 获取用户 ID
+
+        const ws = new WebSocket(`ws://192.168.1.24:3012/ws?key=${userId}`)
+        // const ws = new WebSocket(`ws://localhost:3033/ws?userId=${userId}`)
+
+        // const ws = new WebSocket('ws://localhost:3010')
+        const clickArea = document.getElementById('click-area')
+        const clicksDisplay = document.getElementById('clicks')
+        const buttonsDisplay = document.getElementById('reset-buttons')
+        const websocketLog = document.getElementById('websocket-data')
+        const textLog = document.getElementById('text-log')
+        const skillList = document.getElementById('skill-list')
+        const SignIn = document.getElementById('sign-in')
+
+        let clicks = 0
+        let clickBuffer = 0
+        let maxEnergy = 0
+        let MultitapNb = 1
+        let energy = 0
+        let Pis = 0
+        let PiCrystals = 0
+        let clickRate = 1
+
+
+
+        const publicKey = `-----BEGIN PUBLIC KEY-----
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzN+i9uppU4Q576dg3LjP
+        /rV9fhKknDthACf7HEPAw+NURrPS6TEj0lvU6VzuCVT+fbTxomokc2iwnIV+rbk4
+        7DeHclt8h3xu3sp7J/jF7051meVRnnTjxtcw3getNxR9A+KVBUa/NUpG8J/xILDH
+        SONQWkLnih5hEpN2etllK0eoD8qH6txdpBUQzM1IMNwMJl5DPalHpy3+pokmMMrP
+        Vqvu2tKcMfp4NSui5z2wSy4F3JvFzJGawmPZwN8oseNGRlC6N995hGHUFtGayX+g
+        YNG1uHG5H8ssDavYudjATHBfW0EtPEVouR6uWDzOO8/xntzVgOgAGUn5tLZlUET2
+        TwIDAQAB
+        -----END PUBLIC KEY-----`
+
+        let aesKey = ''
+
+
+        // 使用 RSA 公钥加密 AES 密钥
+        const encrypt = new JSEncrypt()
+        encrypt.setPublicKey(publicKey)
+        const encryptedAesKey = encrypt.encrypt(aesKey)
+
+        function encryptMessage (message, key) {
+            const iv = CryptoJS.lib.WordArray.random(16)
+            const keyUtf8 = CryptoJS.enc.Base64.parse(key)
+            const encrypted = CryptoJS.AES.encrypt(message, keyUtf8, { iv: iv }).toString()
+            return iv.toString(CryptoJS.enc.Base64) + ':' + encrypted
+        }
+
+        function decryptMessage (encryptedMessage, key) {
+            const parts = encryptedMessage.split(':')
+            const iv = CryptoJS.enc.Base64.parse(parts[0])
+            const encrypted = parts[1]
+            const keyUtf8 = CryptoJS.enc.Base64.parse(key)
+            const decrypted = CryptoJS.AES.decrypt(encrypted, keyUtf8, { iv: iv })
+            return decrypted.toString(CryptoJS.enc.Utf8)
+        }
+
+
+        ws.onopen = () => {
+
+            console.log('Connected to server')
+
+            // 生成 32 字节的 AES 密钥（直接使用 WordArray 并转换为 Base64 字符串）
+            aesKey = CryptoJS.lib.WordArray.random(32).toString(CryptoJS.enc.Base64)
+            console.log('Generated AES key:', aesKey)
+
+            // 使用 RSA 公钥加密 AES 密钥
+            const encrypt = new JSEncrypt()
+            encrypt.setPublicKey(publicKey)
+            const encryptedAesKey = encrypt.encrypt(aesKey)
+
+            if (!encryptedAesKey) {
+                console.error('Failed to encrypt AES key')
+                return
+            }
+
+            // 发送加密的 AES 密钥到服务器
+            ws.send(encryptedAesKey)
+
+            console.log('WebSocket connection established')
+            sendmessage({ type: 'requestSkillList' })
+
+        }
+
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error)
+        }
+
+        ws.onmessage = (event) => {
+            const encryptedMessage = event.data
+            const decryptedMessage = decryptMessage(encryptedMessage, aesKey)
+            console.log('Received from server:', decryptedMessage)
+            console.log('Received from server1:', event)
+
+
+            if (event.data) {
+                websocketLog.textContent = decryptedMessage
+                const data = JSON.parse(decryptedMessage)
+
+                console.log(data)
+
+                if (data.type === 'update') {
+                    displayData(data)
+                } else if (data.type === 'skillList') {
+                    console.log(data.skills, "data.skills")
+                    displaySkills(data.skills)
+                } else if (data.type === 'upgradeFailed') {
+                    alert('升级失败，条件不满足')
+                } else if (data.type === 'upgradeSuccess') {
+                    alert('升级成功')
+                    sendmessage({ type: 'requestSkillList' })
+                }
+                else if (data.type === 'SignRes') {
+                    alert(data.result.message)
+                }
+            }
+        }
+
+        clickArea.addEventListener('touchstart', (e) => {
+            e.preventDefault()  // 阻止默认的点击行为
+            const touchCount = e.touches.length
+            console.log(e, "clickArea")
+            const energyPerTouch = touchCount
+            textLog.textContent = ` ${JSON.stringify(e)} ${touchCount}`
+            if (energy >= touchCount * clickRate) {
+                clicks += touchCount
+                clickBuffer += touchCount
+                energy -= touchCount
+                // clicksDisplay.textContent = `Clicks: ${butter} /Pis: ${Pis} /PiCrystals: ${PiCrystals} / Energy: ${energy}`
+                sendmessage({ type: 'clicks', count: touchCount })
+
+                for (let i = 0; i < touchCount; i++) {
+                    showClickEffect(e.touches[i].clientX, e.touches[i].clientY, `+${clickRate}`)
+                }
+            }
+        })
+
+        //签到
+        SignIn.addEventListener('click', () => {
+            console.log('签到')
+            sendmessage({ type: 'SignIn' })
+        })
+
+        function sendmessage (message) {
+            const data = JSON.stringify(message)
+            const encryptedMessage = encryptMessage(data, aesKey)
+            ws.send(encryptedMessage)
+        }
+
+        function showClickEffect (x, y, text) {
+            const effect = document.createElement('div')
+            effect.className = 'click-effect'
+            effect.textContent = text
+            effect.style.left = `${x}px`
+            effect.style.top = `${y}px`
+            document.body.appendChild(effect)
+
+            effect.addEventListener('animationend', () => {
+                effect.remove()
+            })
+        }
+        function displaySkills (skills) {
+            console.log(skills, "skills")
+
+            skillList.innerHTML = ''
+            const effectDictionary = {
+                energyCap: "能量上限",
+                passiveEnergyRate: "能量恢复速度",
+                clickRate: "点击加成",
+                passiveIncomeRate: "被动产生金币"
+                // 这里可以添加其他效果的描述
+            }
+
+            skills.forEach(skill => {
+                const skillItem = document.createElement('div')
+                skillItem.className = 'skill-items'
+
+                // 获取效果描述
+                const effectDescription = skill.nextEffect
+                    ? Object.entries(skill.nextEffect).map(([key, value]) => {
+                        return `${effectDictionary[key] || key}: +${value}`
+                    }).join(', ')
+                    : "No further upgrades"
+
+                // 构建技能信息
+                let skillInfo = `
+            <span>技能: ${skill.skillName}</span>
+            <span>当前等级: ${skill.currentLevel}</span>
+            <span>下一级: ${skill.nextLevel || '已达最高等级'}</span>
+            <span>升级效果: ${effectDescription}</span>
+        `
+
+                // 如果有前置条件，显示前置条件
+                let hasRequiredSkill = true
+                if (skill.nextRequiredSkillId && skill.nextRequiredSkillLevel) {
+                    const requiredSkill = skills.find(s => s.skillId === skill.nextRequiredSkillId)
+                    if (requiredSkill && requiredSkill.currentLevel < skill.nextRequiredSkillLevel) {
+                        hasRequiredSkill = false
+                    }
+                    const conditionColor = hasRequiredSkill ? 'green' : 'red'
+
+                    skillInfo += `<span style="color: ${conditionColor};">前置条件: ${skill.nextRequiredSkillname} (等级 ${skill.nextRequiredSkillLevel})</span>`
+                }
+
+                // 显示升级所需的资源
+                if (!skill.isMaxLevel) {
+                    let hasRequiredSkillnextCostPis = parseFloat(skill.nextCostPis || 0) <= parseFloat(Pis)
+                    let nextCostPiCrystals = parseFloat(skill.nextCostPiCrystals || 0) <= parseFloat(PiCrystals)
+                    const conditionColor1 = hasRequiredSkillnextCostPis ? 'green' : 'red'
+                    const conditionColor2 = nextCostPiCrystals ? 'green' : 'red'
+                    skillInfo += `
+                        <span style="color: ${conditionColor1};">消耗 Pis: ${skill.nextCostPis || 0}</span>
+                        <span style="color: ${conditionColor2};">消耗 Pi Crystals: ${skill.nextCostPiCrystals || 0}</span>
+                    `
+                }
+
+                // 添加升级按钮，如果达到最高等级，则按钮灰色不可点击
+                if (!skill.isMaxLevel) {
+                    // 判断是否可以升级
+                    const canUpgrade = !skill.isMaxLevel &&
+                        parseFloat(skill.nextCostPis || 0) <= parseFloat(Pis) &&
+                        parseFloat(skill.nextCostPiCrystals || 0) <= parseFloat(PiCrystals) &&
+                        hasRequiredSkill
+
+                    // 添加升级按钮，如果达到最高等级，则按钮灰色不可点击
+                    if (canUpgrade) {
+                        skillInfo += `<button class="upgrade-btn" onclick="upgradeSkill(${skill.skillId}, ${skill.nextLevel})">升级</button>`
+                    } else {
+                        skillInfo += `<button class="upgrade-btn" disabled style="background-color: grey; cursor: not-allowed;">未满足要求</button>`
+                    }
+
+                } else {
+                    skillInfo += `<button class="upgrade-btn" disabled style="background-color: grey; cursor: not-allowed;">已达最高等级</button>`
+                }
+
+                skillItem.innerHTML = skillInfo
+                skillList.appendChild(skillItem)
+            })
+        }
+
+
+        function displayData (data) {
+            console.log(data, "data")
+
+            // 更新全局变量
+            energy = data.energy || 0
+            butter = data.totalClicks || 0
+            Pis = data.Pis || 0
+            PiCrystals = data.PiCrystals || 0
+            clickRate = data.clickRate || 1
+
+
+            // 更新显示文本
+            // clicksDisplay.textContent = `Clicks: ${butter} /Pis: ${Pis} /PiCrystals: ${PiCrystals} / Energy: ${energy}`
+
+            // 清空按钮容器
+            buttonsDisplay.innerHTML = ''
+
+            // 更新显示文本
+            // clicksDisplay.textContent = `Clicks: ${butter} /Pis: ${Pis} /PiCrystals: ${PiCrystals} / Energy: ${energy}`
+
+            // 清空按钮容器
+            buttonsDisplay.innerHTML = ''
+
+            // 创建按钮
+            const buttonItem = document.createElement('div')
+
+            let buttonInfo = `<button id="reset-item">Clicks ${butter}</button>`
+            buttonInfo += `<button id="reset-item">Pis ${Pis}</button>`
+            buttonInfo += `<button id="reset-item">PiCrystals ${PiCrystals}</button>`
+            buttonInfo += `<button id="reset-item">Energy ${energy}</button>`
+            buttonItem.innerHTML = buttonInfo
+            // 添加按钮到页面
+            buttonsDisplay.appendChild(buttonItem)
+        }
+
+        function upgradeSkill (skillId, nextLevel) {
+            ws.send(JSON.stringify({ type: 'upgradeSkill', skillId, nextLevel }))
+        }
+        // Reset button logic
+        // document.getElementById('reset-item').addEventListener('click', () => {
+        //     clicks = 0
+        //     clickBuffer = 0
+        //     energy = maxEnergy
+        //     clicksDisplay.textContent = `Clicks: ${clicks} / Energy: ${energy}`
+        // })
+
+        // Send clicks to server every 5 seconds
+        // setInterval(() => {
+        //     if (clickBuffer > 0) {
+        //         ws.send(JSON.stringify({ type: 'clicks', count: clickBuffer }))
+        //         clickBuffer = 0
+        //     }
+        // }, 5000)
+
+        // Request server to send update every 1/3 second
+        setInterval(() => {
+            const data = JSON.stringify({ type: 'requestUpdate' })
+            const encryptedMessage = encryptMessage(data, aesKey)
+            ws.send(encryptedMessage)
+        }, 1000)
+    </script>
+</body>
+
+</html>
