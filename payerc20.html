@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERC20 Token Deposit Listener Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.0.0/dist/ethers.umd.js"></script>
+</head>
+
+<body>
+    <h1>ERC20 Token Deposit Listener Test</h1>
+    <p>Click the button below to simulate a token transfer to the specified address：</p>
+    <button onclick="simulateTokenTransfer()">Simulate transfer</button>
+
+    <script>
+        const depositAddress = '0x6854a12e7E730ee6dB889f63004fD08F4433dcCf' // You can replace this with your own address
+        const tokenContractAddress = '0x4aAAD68BE1A2Ac9886B72b9DaE474F3eDd2132D9' // Replace a real token contract address
+        const spenderAddress = depositAddress // own address
+        const abi = [
+            // Erc20 Abi
+            {
+                "constant": true,
+                "inputs": [],
+                "name": "name",
+                "outputs": [{ "name": "", "type": "string" }],
+                "payable": false,
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "constant": true,
+                "inputs": [],
+                "name": "symbol",
+                "outputs": [{ "name": "", "type": "string" }],
+                "payable": false,
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "constant": false,
+                "inputs": [{ "name": "_to", "type": "address" }, { "name": "_value", "type": "uint256" }],
+                "name": "transfer",
+                "outputs": [{ "name": "", "type": "bool" }],
+                "payable": false,
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "constant": true,
+                "inputs": [{ "name": "_owner", "type": "address" }, { "name": "_spender", "type": "address" }],
+                "name": "allowance",
+                "outputs": [{ "name": "", "type": "uint256" }],
+                "payable": false,
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "constant": false,
+                "inputs": [{ "name": "_spender", "type": "address" }, { "name": "_value", "type": "uint256" }],
+                "name": "approve",
+                "outputs": [{ "name": "", "type": "bool" }],
+                "payable": false,
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "constant": true,
+                "inputs": [{ "name": "_owner", "type": "address" }],
+                "name": "balanceOf",
+                "outputs": [{ "name": "balance", "type": "uint256" }],
+                "payable": false,
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    { "indexed": true, "name": "from", "type": "address" },
+                    { "indexed": true, "name": "to", "type": "address" },
+                    { "indexed": false, "name": "value", "type": "uint256" }
+                ],
+                "name": "Transfer",
+                "type": "event"
+            }
+        ]
+
+        async function simulateTokenTransfer () {
+            try {
+                // use MetaMask to connect to the user's wallet
+                const provider = new ethers.providers.Web3Provider(window.ethereum)
+                await provider.send("eth_requestAccounts", [])
+                const signer = provider.getSigner()
+                const userAddress = await signer.getAddress()
+                const tokenContract = new ethers.Contract(tokenContractAddress, abi, signer)
+
+                const amount = ethers.utils.parseUnits("0.5", 18) // if token decimals is 18, then 0.5 token is 500000000000000000
+
+                // check if the user has allowance the token
+                const allowance = await tokenContract.allowance(userAddress, spenderAddress)
+                if (allowance.lt(amount)) {
+                    // allowance token
+                    const approveTx = await tokenContract.approve(spenderAddress, amount)
+                    await approveTx.wait()
+                    console.log('approve success')
+                }
+                const memo = 'Test memgfhjo user 666' // memo message
+
+                // build the transfer and memo transaction 
+                const data = ethers.utils.defaultAbiCoder.encode(['string'], [memo])
+                const tx = {
+                    to: tokenContractAddress,
+                    data: tokenContract.interface.encodeFunctionData('transfer', [depositAddress, amount]) + data.substring(2)
+                }
+
+                const transactionResponse = await signer.sendTransaction(tx)
+                await transactionResponse.wait()
+
+                alert('Transfer success')
+
+            } catch (error) {
+                console.error('Error during token transfer:', error)
+                alert('Error during token transfer,try again later')
+            }
+        }
+    </script>
+</body>
+
+</html>

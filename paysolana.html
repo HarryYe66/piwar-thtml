@@ -29,18 +29,18 @@
 
 <body>
     <h1>Solana Token Deposit Listener Test</h1>
-    <p>点击下面的按钮来模拟一个代币转账到指定地址：</p>
-    <button onclick="simulateTokenTransfer()">模拟代币转账</button>
+    <p>Click the button below to simulate a token transfer to the specified address：</p>
+    <button onclick="simulateTokenTransfer()">Simulate transfer</button>
 
     <script>
-        const depositAddress = '74A2G5b6oPK3PS3yX5rAtFwnYvxtbAuhckoWG125KMcP' // 替换为你的充值地址
-        const tokenMintAddress = '9Ttyez3xiruyj6cqaR495hbBkJU6SUWdV6AmQ9MvbyyS' // 替换为你的代币Mint地址
+        const depositAddress = '74A2G5b6oPK3PS3yX5rAtFwnYvxtbAuhckoWG125KMcP' // replace your own address 
+        const tokenMintAddress = '9Ttyez3xiruyj6cqaR495hbBkJU6SUWdV6AmQ9MvbyyS' // replace your token mint address
 
         async function simulateTokenTransfer () {
             try {
                 const wallet = window.solana
                 if (!wallet) {
-                    alert('请安装Solana钱包')
+                    alert('Plese install Solana wallet extension first')
                     return
                 }
 
@@ -81,11 +81,11 @@
                         toTokenAccount,
                         sender,
                         [],
-                        1 * Math.pow(10, 6) // assuming the token has 6 decimal places
+                        1.27 * Math.pow(10, 6) // assuming the token has 6 decimal places
                     ),
                     new solanaWeb3.TransactionInstruction({
                         keys: [{ pubkey: sender, isSigner: true, isWritable: true }],
-                        data: Buffer.from('Test memo'), // 将 'Test memo' 替换为你需要的备注信息
+                        data: Buffer.from('Test memo user123'), // replance the string with the memo you want to send
                         programId: new solanaWeb3.PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr')
                     })
                 )
@@ -98,10 +98,10 @@
                 const signature = await connection.sendRawTransaction(signedTransaction.serialize())
 
                 await connection.confirmTransaction(signature, 'confirmed')
-                alert('模拟代币转账成功')
+                alert('simulate token transfer success')
             } catch (error) {
                 console.error('Error during token transfer:', error)
-                alert('模拟代币转账失败，请重试')
+                alert('simulate token transfer failed ,Plase try again')
             }
         }
     </script>
